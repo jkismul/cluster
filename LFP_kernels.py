@@ -7,6 +7,7 @@ import pickle
 import matplotlib.pyplot as plt
 import time
 import scipy.signal as ss
+from matplotlib.collections import PolyCollection
 # </editor-fold>
 
 # <editor-fold desc="Parse input">
@@ -45,7 +46,7 @@ else:
     fitses = pickle.load(open('data/fits_inhibition_off.p', 'rb'))
     lines = pickle.load(open('data/lines_inhibition_off.p', 'rb'))
 # </editor-fold>
-
+"""
 # <editor-fold desc="make dir">
 folder_time = time.strftime("%m%d-%H%M")
 try:
@@ -54,9 +55,10 @@ except OSError:
     pass
 FOLDER = os.path.join('plots', '{}_{}'.format(suffix,folder_time))
 # </editor-fold>
-
+"""
 # <editor-fold desc="Define functions">
 def insert_synapses(synparams, section, n,heights,firings):
+    soma_h = heights['soma']
     if section == 'dend':
         maxim = heights['basal_max']
         minim = heights['min']
@@ -70,15 +72,16 @@ def insert_synapses(synparams, section, n,heights,firings):
     if section == 'allsec':
         maxim = heights['max']
         minim = heights['min']
-        delay = delay['T']
     '''find n compartments to insert synapses onto'''
-    idx = cell.get_rand_idx_area_norm(section=section, nidx=n, z_min=minim, z_max=maxim)
+    idx = cell.get_rand_idx_area_norm(section=section, nidx=n, z_min=soma_h+minim, z_max=soma_h+maxim)
+    # idx = cell.get_rand_idx_area_norm(section=section, nidx=n, z_min=minim, z_max=maxim)
     # Insert synapses in an iterative fashion
     for i in idx:
         synparams.update({'idx': int(i)})
-        # Create synapse(s) and setting times using the Synapse class in LFPy
+    #     # Create synapse(s) and setting times using the Synapse class in LFPy
         s = LFPy.Synapse(cell, **synparams)
-        s.set_spike_times(np.random.choice(dist, firings_per_synapse))
+        # s.set_spike_times(np.random.choice(dist, firings_per_synapse))
+        s.set_spike_times(np.array([25.]))
 # </editor-fold>
 
 # <editor-fold desc="Define parameters & variables">
@@ -93,8 +96,8 @@ electrodeParameters = {
     'sigma' : 0.3,              # Extracellular potential
     'x' : np.zeros(16),# + 25,      # x,y,z-coordinates of electrode contacts
     'y' : np.zeros(16),
-    'z' : np.linspace(-500,1000,16),
-    # 'z' : np.linspace(-1600, -100, 16),
+    # 'z' : np.linspace(-500,1000,16),
+    'z' : np.linspace(-1600, -100, 16),
     'n' : 20,
     'r' : 10,
     'N' : N,
@@ -103,7 +106,7 @@ electrodeParameters = {
 
 
 parameters={
-    'num_cells':300,
+    'num_cells':10,
     'divi':2,
     'n_syn':200,
     'firings':{
@@ -115,6 +118,7 @@ parameters={
         'min':-1000.,
         'basal_max':-50.,
         'apical_min':500.,
+        'soma': -1250.,
     },
     'cell_parameters':{
         'morphology': morphology,
@@ -128,23 +132,62 @@ parameters={
         'lambda_f': 100.,  # frequency where length constants are computed
         'dt': 2. ** -3,  # simulation time step size
         'tstart': -300.,  # start time of simulation, recorders start at t=0
-        'tstop': 20.  # 50.,  # stop simulation at 100 ms.
+        'tstop':  50.,  # stop simulation at 100 ms.
     },
     'synapse_parameters':{
         'idx': [],
-        # 'syntype': 'Exp2Syn',
+        'e':0.,
         'syntype': 'ExpSynI',
-        # 'tau1': 1.,
-        # 'tau2': 3.,
         'tau':.1,
         'weight': .1001,  # synaptic weight
         'record_current': True,  # record synapse current
     },
 }
-cutoff = int(parameters['num_cells'] / parameters['divi'])
-print('cutoff at',cutoff,'of',parameters['num_cells'])
+
 p = [] #dipole moment
 v = [] #vmem
+im = []
+x_line = np.linspace(0, parameters['cell_parameters']['tstop'], len(fitses[0]))
+# </editor-fold>
+elleffpe = [9]
+syni=[]
+# <editor-fold desc="Main simulation">
+for i in range(parameters['num_cells']):
+    print('cell {} of {}.'.format(i + 1, parameters['num_cells']), end='\r')
+    cell = LFPy.Cell(**parameters['cell_parameters'])#**cell_parameters)
+    cell.set_rotation(x=4.99, y=-4.33)  # let rotate around z-axis
+    cell.set_pos(x=np.random.normal(loc=0,scale=100),y=np.random.normal(loc=0,scale=100),z=np.random.normal(loc=parameters['heights']['soma'],scale=10))
+    insert_synapses(parameters['synapse_parameters'], 'apic', parameters['n_syn']
+                    ,parameters['heights'],parameters['firings'])
+
+
+    cell.simulate(rec_imem=True, rec_vmem=True, rec_current_dipole_moment=True)
+    P = cell.current_dipole_moment
+    p.append(np.asarray(P))
+    v.append(cell.vmem[0])
+    im.append(cell.imem)
+    elec = LFPy.RecExtElectrode(cell,**electrodeParameters)
+    elec.calc_lfp()
+    elleffpe.append(elec.LFP)
+print("                                 ", end='\r')
+print("done")
+syni.append(cell.synidx)
+syni = cell.synidx
+ehh = np.mean(elleffpe,axis=0)
+# plt.figure()
+mupp = []
+for i in range(16):
+    mupp.append(ehh[i]-ehh[i][0])
+
+# for i in range(16):
+#     plt.plot(cell.tvec,mupp[i]/np.max(np.abs(mupp))+(i))
+#
+# plt.yticks(np.arange(0,16),labels=np.arange(1,17))
+# plt.gca().invert_yaxis()
+
+p = [] #dipole moment
+v = [] #vmem
+im = []
 x_line = np.linspace(0, parameters['cell_parameters']['tstop'], len(fitses[0]))
 # </editor-fold>
 elleffpe = [9]
@@ -153,149 +196,72 @@ for i in range(parameters['num_cells']):
     print('cell {} of {}.'.format(i + 1, parameters['num_cells']), end='\r')
     cell = LFPy.Cell(**parameters['cell_parameters'])#**cell_parameters)
     cell.set_rotation(x=4.99, y=-4.33)  # let rotate around z-axis
-    cell.set_pos(x=np.random.normal(loc=0,scale=100),y=np.random.normal(loc=0,scale=100),z=np.random.normal(loc=0,scale=10))
-    if i <= cutoff:
-        insert_synapses(parameters['synapse_parameters'], 'dend', parameters['n_syn']
-                        ,parameters['heights'],parameters['firings'])
-    else:
-        insert_synapses(parameters['synapse_parameters'], 'apic', parameters['n_syn']
-                        ,parameters['heights'],parameters['firings'])
+    cell.set_pos(x=np.random.normal(loc=0,scale=100),y=np.random.normal(loc=0,scale=100),z=np.random.normal(loc=parameters['heights']['soma'],scale=10))
+    insert_synapses(parameters['synapse_parameters'], 'dend', parameters['n_syn']
+                    ,parameters['heights'],parameters['firings'])
+
 
     cell.simulate(rec_imem=True, rec_vmem=True, rec_current_dipole_moment=True)
     P = cell.current_dipole_moment
     p.append(np.asarray(P))
     v.append(cell.vmem[0])
+    im.append(cell.imem)
     elec = LFPy.RecExtElectrode(cell,**electrodeParameters)
     elec.calc_lfp()
     elleffpe.append(elec.LFP)
 print("                                 ", end='\r')
 print("done")
-# </editor-fold>
 
 ehh = np.mean(elleffpe,axis=0)
-plt.figure()
-plt.imshow(ehh,extent=[0,20,16,0],origin='lower')
-
-mupp = []
+# plt.figure()
+mupp2 = []
 for i in range(16):
-    mupp.append(ehh[i]-ehh[i][0])
-for i in range(16):
-    # plt.plot(cell.tvec,(1/(np.max(ehh[i])-np.min(ehh[i])))*(ehh[i]-np.min(ehh[i]))+i+ehh[i][0],c='pink')
-    # plt.plot(cell.tvec,(-1/(np.max(ehh[i])-ehh[i][0]))*(ehh[i]-ehh[i][0])+i+1,c='pink')
-    # plt.plot(cell.tvec,(ehh[i]-ehh[i][0])+(i/1000))
-    # ax2.plot(cell.tvec,ehh[i]-ehh[i][0]+(i/50000))
-    # ax2.plot(cell.tvec,mupp[i]/np.max(abs(mupp[i]))+i*pixel)#ehh[0][0])
-    plt.plot(cell.tvec,mupp[i]/np.max(abs(mupp[i]))+(i+.5))#ehh[0][0])
-
-# fig.tight_layout()
-plt.savefig('{}/LFP_{}.pdf'.format(FOLDER,suffix))
-
-# <editor-fold desc="Mean">
-bas = np.mean(p[0:cutoff], axis=0)[:, 0]
-api = np.mean(p[cutoff:], axis=0)[:, 0]
-signal_mean = np.mean(p, axis=0)[:, 0]
-# </editor-fold>
-
-# <editor-fold desc="Scaling">
-a=np.max(abs(signal_mean))
-b=np.max(abs(lines[1]))
-c=a/b
-d=np.max(abs(bas))
-e=np.max(abs(fitses[0]))
-f=d/e
-g=np.max(abs(api))
-h=np.max(abs(fitses[1]))
-i=g/h
-factors = [c, f, i]
-print(factors)
-# factors=[1,1,1]
-# print(factors)
-# </editor-fold>
-
-opp = []
-ned=[]
-for i in range(parameters['num_cells']):
-    if i<=cutoff:
-         opp.append(v[i])
-    else:
-        ned.append(v[i])
-
-# <editor-fold desc="Main plot">
-plt.figure()
-# plt.plot(cell.tvec, mupp[-1] / np.max(np.abs(mupp[-1])),color='green',ls='--',label='lfp')  # ehh[0][0])
-# plt.plot(cell.tvec, np.max(lines[1] * factors[0])*mupp[-1],color='green',ls='--',label='lfp')  # ehh[0][0])
-
-plt.plot(cell.tvec, signal_mean, color='gray', ls='--', label='total')
-plt.plot(lines[0], lines[1] * factors[0], 'k')
-
-plt.plot(cell.tvec, bas, label='dend', color='orange', ls='--')
-plt.plot(x_line, fitses[0] * factors[1], color='red', ls='-')
-vmemline = 65+np.mean(opp,axis=0)
-vl = np.max(vmemline)
-fi = np.max(fitses[0]*factors[1])
-plt.plot(cell.tvec,(fi/vl)*vmemline,'g')
-
-plt.plot(cell.tvec, api, label='apic', color='cyan', ls='--')
-plt.plot(x_line, fitses[1] * factors[2], color='blue', ls='-')
-vmemline=-65-np.mean(ned,axis=0)
-vl = np.min(vmemline)
-fi = np.min(fitses[1]*factors[2])
-# plt.plot(cell.tvec,(fi/vl)*vmemline,'g')
-
-plt.xlabel('time [ms]')
-plt.ylabel('Voltage [some unit]')
-plt.title('{}'.format(suffix))
-plt.legend()
-plt.savefig('{}/signal_{}.pdf'.format(FOLDER,suffix))
-# </editor-fold>
-
-# <editor-fold desc="Main plot smoothed">
-smooth_sig = ss.savgol_filter(signal_mean,5,3)
-smooth_bas = ss.savgol_filter(bas,5,3)
-smooth_api = ss.savgol_filter(api,5,3)
-plt.figure()
-plt.plot(cell.tvec, smooth_sig, color='gray', ls='--', label='total')
-plt.plot(lines[0], lines[1] * factors[0], 'k')
-
-plt.plot(cell.tvec, smooth_bas, label='dend', color='orange', ls='--')
-plt.plot(x_line, fitses[0] * factors[1], color='red', ls='-')
-
-plt.plot(cell.tvec, smooth_api, label='apic', color='cyan', ls='--')
-plt.plot(x_line, fitses[1] * factors[2], color='blue', ls='-')
-
-plt.xlabel('time [ms]')
-plt.ylabel('Voltage [some unit]')
-plt.title('{}'.format(suffix))
-plt.legend()
-plt.savefig('{}/signal_smoothed_{}.pdf'.format(FOLDER,suffix))
-# </editor-fold>
-
-# <editor-fold desc = "Firing rate plots">
-binny = np.linspace(0, 20, 200)
-plt.figure()
-plt.hist(dist_E, bins=binny, color='red')
-plt.title('{}'.format(suffix))
-plt.savefig('{}/dend_{}.pdf'.format(FOLDER,suffix))
-plt.figure()
-plt.hist(dist_I, bins=binny, color='blue')
-plt.title('{}'.format(suffix))
-plt.savefig('{}/api_{}.pdf'.format(FOLDER,suffix))
-# </editor-fold>
-
-# <editor-fold desc="Vmem plot">
-fig,axs = plt.subplots(2)
-for i in range(parameters['num_cells']):
-    if i<=cutoff:
-        axs[0].plot(cell.tvec, v[i])
-    else:
-        axs[1].plot(cell.tvec,v[i])
-axs[0].set_title('basal')
-axs[1].set_title('apical')
-fig.suptitle('{}'.format(suffix))
-fig.savefig('{}/vmems_{}.pdf'.format(FOLDER,suffix))
-# </editor-fold>
-
-# <editor-fold desc="dump param">
-with open('{}/parameters.txt'.format(FOLDER),'w') as f:
-    print(parameters,file=f)
-# </editor-fold>
+    mupp2.append(ehh[i]-ehh[i][0])
+pickle.dump([mupp,mupp2],open('data/L5.p','wb'))
+#
+# # plt.show()
+# fig = plt.figure()
+# ax = fig.add_axes([.4,.1,.55,.8], aspect='equal', frameon=False)
+# #plot morphology
+# zips = []
+# for x, z in cell.get_idx_polygons():
+#     zips.append(list(zip(x, z)))
+# polycol = PolyCollection(zips,
+#                          edgecolors='none',
+#                          facecolors='k')
+# ax.add_collection(polycol)
+#
+# # ax.plot([100, 200], [-400+parameters['heights']['soma'], -400+parameters['heights']['soma']], 'k', lw=1, clip_on=False)
+# # ax.text(150, -470+parameters['heights']['soma'], r'100$\mu$m', va='center', ha='center')
+# # ax.plot([-550, -550], [100+parameters['heights']['soma'], 200+parameters['heights']['soma']], 'k', lw=1, clip_on=False)
+# # ax.text(-670, 150+parameters['heights']['soma'], r'100$\mu$m', va='center', ha='center')
+#
+# # ax.axis('off')
+#
+# ax.plot([-450,-450],[-1600,-1600],'y*')
+# ax.plot(cell.xmid[cell.synidx],cell.zmid[cell.synidx], 'o', ms=1,
+#         markeredgecolor='b',
+#         markerfacecolor='b')
+#
+#
+# ax.plot(cell.xmid[syni],cell.zmid[syni], 'o', ms=1,
+#         markeredgecolor='r',
+#         markerfacecolor='r')
+#
+# for i in range(16):
+#     ax.plot(cell.tvec*20-550,65*mupp[i]/np.max(np.abs(mupp))+(i*100)-300+parameters['heights']['soma'],'r',lw=0.5)
+#     # ax.plot(cell.tvec*20-550,30*mupp[i]/np.max(np.abs(mupp[i]))+(i*100)-300+parameters['heights']['soma'],'r')
+#
+# for i in range(16):
+#     ax.plot(cell.tvec*20-550,65*mupp2[i]/np.max(np.abs(mupp2))+(i*100)-300+parameters['heights']['soma'],'b',lw=0.5)
+#     # ax.plot(cell.tvec*20-550,30*mupp2[i]/np.max(np.abs(mupp2[i]))+(i*100)-300+parameters['heights']['soma'],'b')
+# ax.set_yticks(np.linspace(-50,-1550,16))
+# ax.set_yticklabels(np.linspace(100,1600,16).astype(int))
+# ax.set_xticks(np.linspace(-550,450,5))
+# ax.set_xticklabels(np.linspace(0,50,5))
+# ax.set_xlabel('time [ms]')
+# ax.set_ylabel('depth [um]')
+# plt.show()
+#
+# print("for å lage l2/3, samle imem over inervaller som 100-200,200-300 etc, summere og halvere rangen, kanksje? "
+#       "bør i såfall kjøre dybder ned til 3200 for å få l23 lfp helt ned?")
