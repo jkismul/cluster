@@ -220,48 +220,52 @@ for i in range(16):
 pickle.dump([mupp,mupp2],open('data/L5.p','wb'))
 #
 # # plt.show()
-# fig = plt.figure()
-# ax = fig.add_axes([.4,.1,.55,.8], aspect='equal', frameon=False)
+fig = plt.figure()
+ax = fig.add_axes([.4,.1,.55,.8], aspect='equal', frameon=False)
 # #plot morphology
-# zips = []
-# for x, z in cell.get_idx_polygons():
-#     zips.append(list(zip(x, z)))
-# polycol = PolyCollection(zips,
-#                          edgecolors='none',
-#                          facecolors='k')
-# ax.add_collection(polycol)
-#
-# # ax.plot([100, 200], [-400+parameters['heights']['soma'], -400+parameters['heights']['soma']], 'k', lw=1, clip_on=False)
-# # ax.text(150, -470+parameters['heights']['soma'], r'100$\mu$m', va='center', ha='center')
-# # ax.plot([-550, -550], [100+parameters['heights']['soma'], 200+parameters['heights']['soma']], 'k', lw=1, clip_on=False)
-# # ax.text(-670, 150+parameters['heights']['soma'], r'100$\mu$m', va='center', ha='center')
-#
-# # ax.axis('off')
-#
-# ax.plot([-450,-450],[-1600,-1600],'y*')
-# ax.plot(cell.xmid[cell.synidx],cell.zmid[cell.synidx], 'o', ms=1,
-#         markeredgecolor='b',
-#         markerfacecolor='b')
-#
-#
-# ax.plot(cell.xmid[syni],cell.zmid[syni], 'o', ms=1,
-#         markeredgecolor='r',
-#         markerfacecolor='r')
-#
-# for i in range(16):
-#     ax.plot(cell.tvec*20-550,65*mupp[i]/np.max(np.abs(mupp))+(i*100)-300+parameters['heights']['soma'],'r',lw=0.5)
-#     # ax.plot(cell.tvec*20-550,30*mupp[i]/np.max(np.abs(mupp[i]))+(i*100)-300+parameters['heights']['soma'],'r')
-#
-# for i in range(16):
-#     ax.plot(cell.tvec*20-550,65*mupp2[i]/np.max(np.abs(mupp2))+(i*100)-300+parameters['heights']['soma'],'b',lw=0.5)
-#     # ax.plot(cell.tvec*20-550,30*mupp2[i]/np.max(np.abs(mupp2[i]))+(i*100)-300+parameters['heights']['soma'],'b')
-# ax.set_yticks(np.linspace(-50,-1550,16))
-# ax.set_yticklabels(np.linspace(100,1600,16).astype(int))
-# ax.set_xticks(np.linspace(-550,450,5))
-# ax.set_xticklabels(np.linspace(0,50,5))
-# ax.set_xlabel('time [ms]')
-# ax.set_ylabel('depth [um]')
+zips = []
+for x, z in cell.get_idx_polygons():
+    zips.append(list(zip(x, z)))
+polycol = PolyCollection(zips,
+                         edgecolors='none',
+                         facecolors='k',
+                         alpha=0.5)
+ax.add_collection(polycol)
+
+# ax.plot([100, 200], [-400+parameters['heights']['soma'], -400+parameters['heights']['soma']], 'k', lw=1, clip_on=False)
+# ax.text(150, -470+parameters['heights']['soma'], r'100$\mu$m', va='center', ha='center')
+# ax.plot([-550, -550], [100+parameters['heights']['soma'], 200+parameters['heights']['soma']], 'k', lw=1, clip_on=False)
+# ax.text(-670, 150+parameters['heights']['soma'], r'100$\mu$m', va='center', ha='center')
+
+# ax.axis('off')
+
+ax.plot([-450,-450],[-1600,-1600],'y*')
+ax.plot(cell.xmid[cell.synidx],cell.zmid[cell.synidx], 'o', ms=1,
+        markeredgecolor='cyan',
+        markerfacecolor='cyan',
+        alpha=0.5)
+
+
+ax.plot(cell.xmid[syni],cell.zmid[syni], 'o', ms=1,
+        markeredgecolor='orange',
+        markerfacecolor='orange',
+        alpha=0.5)
+
+for i in range(16):
+    ax.plot(cell.tvec*20-550,65*mupp[i]/np.max(np.abs(mupp))+(i*100)-300+parameters['heights']['soma'],'r',lw=0.5)
+    # ax.plot(cell.tvec*20-550,30*mupp[i]/np.max(np.abs(mupp[i]))+(i*100)-300+parameters['heights']['soma'],'r')
+
+for i in range(16):
+    ax.plot(cell.tvec*20-550,65*mupp2[i]/np.max(np.abs(mupp2))+(i*100)-300+parameters['heights']['soma'],'b',lw=0.5)
+    # ax.plot(cell.tvec*20-550,30*mupp2[i]/np.max(np.abs(mupp2[i]))+(i*100)-300+parameters['heights']['soma'],'b')
+ax.set_yticks(np.linspace(-50,-1550,16))
+ax.set_yticklabels(np.linspace(100,1600,16).astype(int))
+ax.set_xticks(np.linspace(-550,450,5))
+ax.set_xticklabels(np.linspace(0,50,5))
+ax.set_xlabel('time [ms]')
+ax.set_ylabel('depth [um]')
+plt.savefig('plots/L5_kernels.jpg')
 # plt.show()
-#
+
 # print("for å lage l2/3, samle imem over inervaller som 100-200,200-300 etc, summere og halvere rangen, kanksje? "
 #       "bør i såfall kjøre dybder ned til 3200 for å få l23 lfp helt ned?")
