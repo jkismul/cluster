@@ -27,9 +27,9 @@ LFP_signal = pickle.load(open('data/LFP_lines.p', 'rb'))
 # <editor-fold desc="VARIABLES">
 a=1 #for skewnorm
 err_break = 0.03 #while till err below this value
-max_iter=5
+max_iter=3
 p_degree=7
-num_norms=1
+num_norms=5
 t_min = 0.
 t_max=40.
 t_kern_min=0.
@@ -39,6 +39,7 @@ kerns = L5_kerns
 kerns = np.asarray(kerns)
 kerns = np.flip(kerns, axis=1)  # kerns was sorted inversely to signal!
 num_tsteps = len(LFP_signal[1][1])
+
 #NORMALIZE KERNELS
 # kerns0=preprocessing.Normalizer().transform(kerns[0])
 # kerns1=preprocessing.Normalizer().transform(kerns[1])
@@ -103,12 +104,15 @@ if input_args.fr == 'poly':
              'fun': confun})
     # cons=None
 elif input_args.fr == 'norm':
+    # locs_ = []
     def reroll(kerns):
         x0 = []
+        locs_ = []
         for j in range(kerns.shape[0]):
             #set loc = every N point along t-axis, then use only scale+amp to optimize
-            loc_ = np.random.randint(t_min+0.5, t_max-0.5, num_norms)
-            # loc_=np.linspace(0,40,num_norms)
+            # loc_ = np.random.randint(t_min+0.5, t_max-0.5, num_norms)
+            loc_=np.linspace(0,40,num_norms)
+            locs_.append(loc_)
             scale_ = np.random.randint(norm_scales[0], norm_scales[1], num_norms)
             # amp_ = np.random.randint(bound_big+1, bound_big**2-1, num_norms)
             amp_ = np.random.randint(1,2, num_norms)
@@ -117,16 +121,16 @@ elif input_args.fr == 'norm':
                 x0 = np.hstack((x0, loc_[i]))
                 x0 = np.hstack((x0, scale_[i]))
                 x0 = np.hstack((x0, amp_[i]))
-        return x0
-    bounds=[]
-    bounder = reroll(kerns)
-    for i in range(len(bounder)):
-        if (i + 3) % 3 == 0:
-            bounds.append(norm_loc_bounds)
-        if (i + 5) % 3 == 0:
-            bounds.append(norm_scales_bounds)
-        if (i + 4) % 3 == 0:
-            bounds.append(norm_amp_bounds)
+        return x0,locs_
+    def create_bounds(locs_):
+        bounds = []
+        for i in range(num_kernels_to_run):
+            for j in range(num_norms):
+                bounds.append(norm_loc_bounds)
+                # bounds.append([locs_[i][j]-locs_[i][j]*0.05, locs_[i][j]+locs_[i][j]*0.05])
+                bounds.append(norm_scales_bounds)
+                bounds.append(norm_amp_bounds)
+        return bounds
     cons=None
 else:
     def reroll(kerns):
@@ -175,40 +179,21 @@ def minimize_firing_rates(x, *args):
                 firing_rate_ = np.zeros(num_tsteps)
                 for jj in range(num_norms):
                     firing_rate_ +=x[idx * 3 + (jj * 3 + 2)]*st.skewnorm.pdf(np.linspace(t_min, t_max, num_tsteps),a,loc=x[idx * 3 + jj * 3],scale=x[idx * 3 + (jj * 3 + 1)])
-
-                    # firing_rate_ += x0[idx * 3 + (jj * 3 + 2)]*gauss(np.linspace(t_min, t_max, num_tsteps),x0[idx * 3 + jj * 3],x0[idx * 3 + (jj * 3 + 1)])
-                    # rv = st.norm.pdf(np.linspace(t_min, t_max, num_tsteps), loc=x0[idx * 3 + jj * 3],
-                    #                  scale=x0[idx * 3 + (jj * 3 + 1)])
-
-                    # rv = st.norm.pdf(np.linspace(t_min, t_max, num_tsteps), loc=x0[idx * 3 + jj * 3],
-                    #                  scale=x0[idx * 3 + (jj * 3 + 1)])
-                    #
-                    #
-                    # amp_ = x0[idx * 3 + (jj * 3 + 2)]
-                    # normie = amp_ * rv
-                    # firing_rate_ += normie
-
             fit_ += ss.convolve(firing_rate_, kerns[idx][i], mode="same")
-            # fit_ += ss.convolve(firing_rate_, krnl[idx], mode="same")
-
         result_thing += np.sum((data[0][i] - fit_) ** 2)
 
-    # print('Layer',i,'error:',np.sum((data[0][i] - fit_) ** 2))
     return result_thing
 
 
 
-
+nits=0
 while err > err_break:
     teller += 1
     if teller == max_iter:
         break
-    x0 = reroll(kerns)
-    # print(x0)
-    x0 = [5.,2.,0.5,15.,5.,1.5]
-    # cons = ({'type': 'eq',
-    #          'fun': confun})
-    # cons=None
+    # x0 = reroll(kerns)
+    x0,locs = reroll(kerns)
+    bounds=create_bounds(locs)
     res = minimize(minimize_firing_rates, x0, args=args, bounds=bounds, method="L-BFGS-B",
                    options={'maxfun': 1000000, 'disp': False, 'gtol': 1e-29, 'ftol': 1e-100})  # ,'iprint':0})
 
@@ -219,13 +204,16 @@ while err > err_break:
     if minimize_firing_rates(res['x'], args) < err:
         err = minimize_firing_rates(res['x'], args)
         res_best = res
+    if res['nit']>nits:
+        nits=res['nit']
+    #     nits=minimize_firing_rates(res['nit'],args)
     print('iteration:', teller, ', error:', minimize_firing_rates(res['x'], args), 'best:', err)
     print(res['message'],'nit',res['nit'])
-    # print(res['nit'])
+
 print('final error pred', minimize_firing_rates(res_best['x'], args))
 print(res['message'])
 print('iters done',res['nit'])
-# print(res_best)
+
 # for i in range(num_channels):
 for i in range(1):
 # for i in [0,15]:
@@ -262,9 +250,10 @@ for i in range(1):
                 # firing_rate_ += normie
         firing_rates_opt[idx] = firing_rate_
         fit[i] += ss.convolve(firing_rate_, kerns[idx][i], mode="same")  # ,method='direct')
-        # fit[i] += ss.convolve(firing_rate_, krnl[idx], mode="same")  # ,method='direct')
 
 pickle.dump(fit, open('data/fit_all_channels_test.p', 'wb'))
+
+# tidsakse på signal og fyringsrate bør være likt, og kernels annerledes, hva har skjedd her
 
 # <editor-fold desc="PLOT">
 fig = plt.figure(figsize=[9, 4])
@@ -297,6 +286,7 @@ ax_sig.plot(np.linspace(t_min, t_max, len(fit[0])), fit[0], c='gray', ls='--')
 plotting_convention.simplify_axes(fig.axes)
 plt.savefig("plots/100_runs.png")
 # </editor-fold>
+print('maxnits',nits)
 print("BØR JEG HA MED SHIFT I POLY? VIL VEL STARTE I 0 UANSETT")
 print("KERNELENE VÅRE SER GANSKE FORMLIKE UT, "
       "SÅ DET INNEBÆRER AT MULIG INFO FRA KUN EEG MÅLING ER BEGRENSET OM MAN TILLATER"
