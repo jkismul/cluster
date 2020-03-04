@@ -46,7 +46,7 @@ else:
     fitses = pickle.load(open('data/fits_inhibition_off.p', 'rb'))
     lines = pickle.load(open('data/lines_inhibition_off.p', 'rb'))
 # </editor-fold>
-"""
+
 # <editor-fold desc="make dir">
 folder_time = time.strftime("%m%d-%H%M")
 try:
@@ -55,7 +55,7 @@ except OSError:
     pass
 FOLDER = os.path.join('plots', '{}_{}'.format(suffix,folder_time))
 # </editor-fold>
-"""
+
 # <editor-fold desc="Define functions">
 def insert_synapses(synparams, section, n,heights,firings):
     soma_h = heights['soma']
@@ -106,9 +106,9 @@ electrodeParameters = {
 
 
 parameters={
-    'num_cells':10,
+    'num_cells':6000,
     'divi':2,
-    'n_syn':200,
+    'n_syn':200, #JFK: NEED SOME REAL NUMBER HERE
     'firings':{
         'firings_per_E_synapse':1,
         'firings_per_I_synapse':1,
@@ -118,7 +118,7 @@ parameters={
         'min':-1000.,
         'basal_max':-50.,
         'apical_min':500.,
-        'soma': -1250.,
+        'soma': -1300.,
     },
     'cell_parameters':{
         'morphology': morphology,
@@ -153,10 +153,18 @@ elleffpe = [9]
 syni=[]
 # <editor-fold desc="Main simulation">
 for i in range(parameters['num_cells']):
+    R=210
+    r=R*np.sqrt(np.random.uniform())
+    theta = np.random.uniform()*2*np.pi
+    x_loc = r*np.cos(theta)
+    y_loc = r*np.sin(theta)
+
     print('cell {} of {}.'.format(i + 1, parameters['num_cells']), end='\r')
     cell = LFPy.Cell(**parameters['cell_parameters'])#**cell_parameters)
     cell.set_rotation(x=4.99, y=-4.33)  # let rotate around z-axis
-    cell.set_pos(x=np.random.normal(loc=0,scale=100),y=np.random.normal(loc=0,scale=100),z=np.random.normal(loc=parameters['heights']['soma'],scale=10))
+    # cell.set_pos(x=np.random.normal(loc=0,scale=100),y=np.random.normal(loc=0,scale=100),z=np.random.normal(loc=parameters['heights']['soma'],scale=10))
+    cell.set_pos(x=x_loc,y=y_loc,z=np.random.normal(loc=parameters['heights']['soma'],scale=50))
+
     insert_synapses(parameters['synapse_parameters'], 'apic', parameters['n_syn']
                     ,parameters['heights'],parameters['firings'])
 
@@ -193,10 +201,19 @@ x_line = np.linspace(0, parameters['cell_parameters']['tstop'], len(fitses[0]))
 elleffpe = [9]
 # <editor-fold desc="Main simulation">
 for i in range(parameters['num_cells']):
+    # get coords from circle, R=210 from markram2015
+    R=210
+    r=R*np.sqrt(np.random.uniform())
+    theta = np.random.uniform()*2*np.pi
+    x_loc = r*np.cos(theta)
+    y_loc = r*np.sin(theta)
+
+
     print('cell {} of {}.'.format(i + 1, parameters['num_cells']), end='\r')
     cell = LFPy.Cell(**parameters['cell_parameters'])#**cell_parameters)
     cell.set_rotation(x=4.99, y=-4.33)  # let rotate around z-axis
-    cell.set_pos(x=np.random.normal(loc=0,scale=100),y=np.random.normal(loc=0,scale=100),z=np.random.normal(loc=parameters['heights']['soma'],scale=10))
+    # cell.set_pos(x=np.random.normal(loc=0,scale=100),y=np.random.normal(loc=0,scale=100),z=np.random.normal(loc=parameters['heights']['soma'],scale=10))
+    cell.set_pos(x=x_loc,y=y_loc,z=np.random.normal(loc=parameters['heights']['soma'],scale=50))
     insert_synapses(parameters['synapse_parameters'], 'dend', parameters['n_syn']
                     ,parameters['heights'],parameters['firings'])
 
@@ -218,6 +235,8 @@ mupp2 = []
 for i in range(16):
     mupp2.append(ehh[i]-ehh[i][0])
 pickle.dump([mupp,mupp2],open('data/L5.p','wb'))
+pickle.dump([mupp,mupp2],open(os.path.join(FOLDER,'L5.p'),'wb'))
+
 #
 # # plt.show()
 fig = plt.figure()
@@ -265,6 +284,8 @@ ax.set_xticklabels(np.linspace(0,50,5))
 ax.set_xlabel('time [ms]')
 ax.set_ylabel('depth [um]')
 plt.savefig('plots/L5_kernels.jpg')
+plt.savefig(os.path.join(FOLDER,'L5_kernels.jpg'))
+
 # plt.show()
 
 # print("for å lage l2/3, samle imem over inervaller som 100-200,200-300 etc, summere og halvere rangen, kanksje? "

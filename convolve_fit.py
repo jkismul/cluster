@@ -9,15 +9,19 @@ from scipy.optimize import minimize
 import pandas as pd
 import argparse
 import pickle
+import time
+
 sys.path.insert(0, '/dependencies/')
 from dependencies import plotting_convention
 from sklearn import preprocessing
-# </editor-fold>
 
-#HANDLE INPUT
+# </editor-fold>
+tic = time.time()
+# HANDLE INPUT
 parser = argparse.ArgumentParser()
-parser.add_argument('-fr',help='firing_rate')
-input_args=parser.parse_args()
+parser.add_argument('-fr', help='firing_rate')
+parser.add_argument('-a', help='skew_parameter')
+input_args = parser.parse_args()
 
 # LOAD DATA
 L5_kerns = pickle.load(open('data/L5.p', 'rb'))
@@ -25,66 +29,86 @@ L23_kerns = pickle.load(open('data/L23.p', 'rb'))
 LFP_signal = pickle.load(open('data/LFP_lines.p', 'rb'))
 
 # <editor-fold desc="VARIABLES">
-a=1 #for skewnorm
-err_break = 0.03 #while till err below this value
-max_iter=3
-p_degree=7
-num_norms=5
+layers=[6] #which layers to sim
+if input_args.a:
+    a=float(input_args.a)
+else:
+    a = 0  # for skewnorm
+err_break = 0.03  # while till err below this value
+max_iter = 6
+p_degree = 7
+num_norms = 2 # Disse øker tid ekstremt, best å ha få, med større spredning i loc?
 t_min = 0.
-t_max=40.
-t_kern_min=0.
-t_kern_max=50.
-# kerns = np.vstack((L5_kerns,L23_kerns))
-kerns = L5_kerns
+# t_max = 40.
+t_max=30.#have cut 2x5 for smooth and removal of unwanteds
+t_kern_min = 0.
+t_kern_max = 50.
+norm_deviation = t_max / num_norms
+
+kerns = np.vstack((L5_kerns,L23_kerns))
+# kerns = L5_kerns
 kerns = np.asarray(kerns)
 kerns = np.flip(kerns, axis=1)  # kerns was sorted inversely to signal!
 num_tsteps = len(LFP_signal[1][1])
+# NORMALIZE KERNELS
+# kerns0=np.asarray(preprocessing.Normalizer().transform(kerns[0]))
+# kerns1=np.asarray(preprocessing.Normalizer().transform(kerns[1]))
+# kerns2=np.asarray(preprocessing.Normalizer().transform(kerns[2]))
+# kerns3=np.asarray(preprocessing.Normalizer().transform(kerns[3]))
+# kerns=np.asarray([kerns0,kerns1,kerns2,kerns3])
+#1 layer, 4 kernels. not normalized: 158.3s, normalized: 374.0s maybe due to amp
+# bounds? anyway, nromalizing will make firingrates somewhat less tractable for a forward model again?
+#normalized got a best err of 0.09,
+#not normalized 0.13.
+#only 4 iterations, could be chance
 
-#NORMALIZE KERNELS
-# kerns0=preprocessing.Normalizer().transform(kerns[0])
-# kerns1=preprocessing.Normalizer().transform(kerns[1])
-# kerns=[kerns0,kerns1]
+# data = LFP_signal[1]
 
 data = LFP_signal[1]
+# data = data[:,:-10] #cut poor signal data!!JFK
+data = data[:,:-20] #cut poor signal data!!JFK
+#should be approx 35s now
+
+num_tsteps=len(data[1])
 
 args = [data]
 num_kernels_to_run = kerns.shape[0]
 kernel_num_tsteps = len(kerns[0][0])
 num_channels = 16
-dt = 40. / num_tsteps
+dt = t_max / num_tsteps
 dt_k = 1e-3
 dt_k = dt_k / kernel_num_tsteps
-t = np.arange(len(data)) * dt #denne er 16 lang?
-err = 1e16#1e9
-amp_min=0
-amp_max=5
-norm_scales=[2,4]
-norm_scales_bounds=[1,5]
-norm_loc_bounds=[0,40]
-norm_amp_bounds=[0,1e5]
-bound_big = 1e3 #huge value for bounds, temp thing
+t = np.arange(len(data)) * dt
+err = 1e16  # 1e9
+amp_min = 0
+amp_max = 5
+norm_scales = [2, 4]
+norm_scales_bounds = [1, 5]
+norm_loc_bounds = [0, t_max]
+norm_amp_bounds = [0, 1e5]
+bound_big = 1e3  # huge value for bounds, temp thing
 fit = np.zeros((num_channels, num_tsteps))
 firing_rates_opt = np.zeros((num_kernels_to_run, num_tsteps))
 teller = 0
-# print(np.shape(data))
-t = np.arange(len(data[0])) * dt #denne er 16 lang?
-t2 = np.arange(len(data[0])) * dt #denne er 16 lang?
+t = np.arange(len(data[0])) * dt
+t2 = np.arange(len(data[0])) * dt
 
 
 # </editor-fold>
 
-def confun(x): #polynomial constraints
+def confun(x):  # polynomial constraints
     constr = []
     for idx in range(num_kernels_to_run):
         poly_ = np.poly1d(x[(idx) * p_degree + idx:(idx + 1) * p_degree + idx])
         f = lambda t: poly_(t / t[-1])
         poly_ = f(np.linspace(t_min, t_max, num_tsteps))
         firing_rate_ = np.abs(poly_)
-        constr=np.hstack((constr,firing_rate_[0]))
-        constr=np.hstack((constr,firing_rate_[-1]))
+        constr = np.hstack((constr, firing_rate_[0]))
+        constr = np.hstack((constr, firing_rate_[-1]))
     return constr
 
-#create initial values and boundaries
+
+# create initial values and boundaries
 if input_args.fr == 'poly':
     def reroll(kerns):
         x0 = []
@@ -94,12 +118,14 @@ if input_args.fr == 'poly':
             x0 = np.hstack((x0, x))
             x0 = np.hstack((x0, z))
         return x0
-    bounds=[]
+
+
+    bounds = []
     # bounder = reroll(kerns)
     for i in range(kerns.shape[0]):
         for j in range(p_degree):
-            bounds.append([-1e6,1e6])
-        bounds.append([-10,10])
+            bounds.append([-1e6, 1e6])
+        bounds.append([-10, 10])
     cons = ({'type': 'eq',
              'fun': confun})
     # cons=None
@@ -109,29 +135,38 @@ elif input_args.fr == 'norm':
         x0 = []
         locs_ = []
         for j in range(kerns.shape[0]):
-            #set loc = every N point along t-axis, then use only scale+amp to optimize
+            # set loc = every N point along t-axis, then use only scale+amp to optimize
             # loc_ = np.random.randint(t_min+0.5, t_max-0.5, num_norms)
-            loc_=np.linspace(0,40,num_norms)
+            loc_ = np.linspace(t_min, t_max, num_norms)
             locs_.append(loc_)
             scale_ = np.random.randint(norm_scales[0], norm_scales[1], num_norms)
             # amp_ = np.random.randint(bound_big+1, bound_big**2-1, num_norms)
-            amp_ = np.random.randint(1,2, num_norms)
+            amp_ = np.random.randint(1, 2, num_norms)
 
             for i in range(num_norms):
                 x0 = np.hstack((x0, loc_[i]))
                 x0 = np.hstack((x0, scale_[i]))
                 x0 = np.hstack((x0, amp_[i]))
-        return x0,locs_
+        return x0, locs_
+
+
     def create_bounds(locs_):
         bounds = []
         for i in range(num_kernels_to_run):
             for j in range(num_norms):
                 bounds.append(norm_loc_bounds)
-                # bounds.append([locs_[i][j]-locs_[i][j]*0.05, locs_[i][j]+locs_[i][j]*0.05])
+                # if j == 0:
+                #     bounds.append([t_min, locs_[i][j] + norm_deviation])
+                # elif j == (num_norms - 1):
+                #     bounds.append([locs_[i][j] - norm_deviation, t_max])
+                # else:
+                #     bounds.append([locs_[i][j] - norm_deviation, locs_[i][j] + norm_deviation])
                 bounds.append(norm_scales_bounds)
                 bounds.append(norm_amp_bounds)
         return bounds
-    cons=None
+
+
+    cons = None
 else:
     def reroll(kerns):
         x0 = []
@@ -141,59 +176,62 @@ else:
             x0 = np.hstack((x0, x))
             x0 = np.hstack((x0, np.random.randint(amp_min, amp_max)))  # amp
         return x0
-    bounds=[]
-    bounder=reroll(kerns)
+
+
+    bounds = []
+    bounder = reroll(kerns)
     for i in range(len(bounder)):
         bounds.append([0, bound_big])  # should maybe be the sqrt of this, as amp*timestep is the "real" max height
     cons = None
-gauss = lambda x, loc, scale: 1 / (np.sqrt(2 * np.pi) * scale) * np.exp(
-    -np.power((x - loc) / scale, 2) / 2)
 
 
+# gauss = lambda x, loc, scale: 1 / (np.sqrt(2 * np.pi) * scale) * np.exp(
+#     -np.power((x - loc) / scale, 2) / 2)
 
 
 def minimize_firing_rates(x, *args):
     data = args[0]
     result_thing = 0
-    # for i in range(num_channels):
-    for i in range(1):
-    # for i in [0,15]:
+    for i in range(num_channels):
+    # for i in range(1):
+    # for i in layers:
         fit_ = np.zeros(len(data[0][i]))
         for idx in range(num_kernels_to_run):
-            if input_args.fr !='norm' and input_args.fr!='poly':
-                amp_=x[num_tsteps*(idx+1)+idx]
-                firing_rate_ = amp_*x[(idx)*num_tsteps+idx:(idx+1)*num_tsteps+idx]
+            if input_args.fr != 'norm' and input_args.fr != 'poly':
+                amp_ = x[num_tsteps * (idx + 1) + idx]
+                firing_rate_ = amp_ * x[(idx) * num_tsteps + idx:(idx + 1) * num_tsteps + idx]
             if input_args.fr == 'poly':
-                poly_ = np.poly1d(x[(idx)*p_degree+idx:(idx+1)*p_degree+idx])
+                poly_ = np.poly1d(x[(idx) * p_degree + idx:(idx + 1) * p_degree + idx])
                 # f = lambda t: poly_(t - x[(idx+1)*p_degree])
                 # f = lambda t: poly_((t - x[(idx+1)*p_degree])/t_max)
 
-                f = lambda t: poly_(t/t[-1])
+                f = lambda t: poly_(t / t[-1])
                 # f = lambda t: poly_(t/t_max)
 
-                poly_=f(np.linspace(t_min,t_max,num_tsteps))
-                firing_rate_=poly_
+                poly_ = f(np.linspace(t_min, t_max, num_tsteps))
+                firing_rate_ = poly_
                 # firing_rate_= np.abs(poly_)
-                firing_rate_[firing_rate_<0]=0
+                firing_rate_[firing_rate_ < 0] = 0
             if input_args.fr == 'norm':
                 firing_rate_ = np.zeros(num_tsteps)
                 for jj in range(num_norms):
-                    firing_rate_ +=x[idx * 3 + (jj * 3 + 2)]*st.skewnorm.pdf(np.linspace(t_min, t_max, num_tsteps),a,loc=x[idx * 3 + jj * 3],scale=x[idx * 3 + (jj * 3 + 1)])
+                    firing_rate_ += x[idx * 3 + (jj * 3 + 2)] * st.skewnorm.pdf(np.linspace(t_min, t_max, num_tsteps),
+                                                                                a, loc=x[idx * 3 + jj * 3],
+                                                                                scale=x[idx * 3 + (jj * 3 + 1)])
             fit_ += ss.convolve(firing_rate_, kerns[idx][i], mode="same")
         result_thing += np.sum((data[0][i] - fit_) ** 2)
 
     return result_thing
 
 
-
-nits=0
+nits = 0
 while err > err_break:
     teller += 1
     if teller == max_iter:
         break
     # x0 = reroll(kerns)
-    x0,locs = reroll(kerns)
-    bounds=create_bounds(locs)
+    x0, locs = reroll(kerns)
+    bounds = create_bounds(locs)
     res = minimize(minimize_firing_rates, x0, args=args, bounds=bounds, method="L-BFGS-B",
                    options={'maxfun': 1000000, 'disp': False, 'gtol': 1e-29, 'ftol': 1e-100})  # ,'iprint':0})
 
@@ -204,50 +242,36 @@ while err > err_break:
     if minimize_firing_rates(res['x'], args) < err:
         err = minimize_firing_rates(res['x'], args)
         res_best = res
-    if res['nit']>nits:
-        nits=res['nit']
-    #     nits=minimize_firing_rates(res['nit'],args)
+
     print('iteration:', teller, ', error:', minimize_firing_rates(res['x'], args), 'best:', err)
-    print(res['message'],'nit',res['nit'])
-
+    print(res['message'])
 print('final error pred', minimize_firing_rates(res_best['x'], args))
-print(res['message'])
-print('iters done',res['nit'])
 
-# for i in range(num_channels):
-for i in range(1):
-# for i in [0,15]:
+for i in range(num_channels):
+# for i in range(1):
+# for i in layers:
     for idx in range(num_kernels_to_run):
         if input_args.fr != 'norm' and input_args.fr != 'poly':
             amp_ = res_best.x[num_tsteps * (idx + 1) + idx]
             firing_rate_ = amp_ * res_best.x[(idx) * num_tsteps + idx:(idx + 1) * num_tsteps + idx]
         if input_args.fr == 'poly':
-            poly_ = np.poly1d(res_best.x[(idx)*p_degree+idx:(idx+1)*p_degree+idx])
+            poly_ = np.poly1d(res_best.x[(idx) * p_degree + idx:(idx + 1) * p_degree + idx])
             # f = lambda t: poly_(t - res_best.x[(idx+1)*p_degree])
             # f = lambda t: poly_((t - res_best.x[(idx+1)*p_degree])/t[-1])
             f = lambda t: poly_(t / t[-1])
 
-            poly_=f(np.linspace(t_min,t_max,num_tsteps))
+            poly_ = f(np.linspace(t_min, t_max, num_tsteps))
             # firing_rate_= np.abs(poly_)
-            firing_rate_=poly_
+            firing_rate_ = poly_
             firing_rate_[firing_rate_ < 0] = 0
 
         if input_args.fr == 'norm':
             firing_rate_ = np.zeros(num_tsteps)
-            for jj in range(num_norms):  # num_norms
-
-                firing_rate_ += res.x[idx * 3 + (jj * 3 + 2)] * st.skewnorm.pdf(np.linspace(t_min, t_max, num_tsteps), a,
-                                                                             loc=res.x[idx * 3 + jj * 3],
-                                                                             scale=res.x[idx * 3 + (jj * 3 + 1)])
-
-                # firing_rate_ += x0[idx * 3 + (jj * 3 + 2)] * gauss(np.linspace(t_min, t_max, num_tsteps),
-                #                                                    x0[idx * 3 + jj * 3], x0[idx * 3 + (jj * 3 + 1)])
-
-                # rv = st.norm.pdf(np.linspace(t_min, t_max, num_tsteps), loc=res_best.x[idx * 3 + jj * 3],
-                #                  scale=res_best.x[idx * 3 + (jj * 3 + 1)])
-                # amp_ = res_best.x[idx * 3 + (jj * 3 + 2)]
-                # normie = amp_ * rv
-                # firing_rate_ += normie
+            for jj in range(num_norms):
+                firing_rate_ += res.x[idx * 3 + (jj * 3 + 2)] * st.skewnorm.pdf(np.linspace(t_min, t_max, num_tsteps),
+                                                                                a,
+                                                                                loc=res.x[idx * 3 + jj * 3],
+                                                                                scale=res.x[idx * 3 + (jj * 3 + 1)])
         firing_rates_opt[idx] = firing_rate_
         fit[i] += ss.convolve(firing_rate_, kerns[idx][i], mode="same")  # ,method='direct')
 
@@ -268,29 +292,36 @@ line_names = []
 t_kern = np.linspace(t_kern_min, t_kern_max, len(kerns[0][0]))
 
 for idx in range(num_kernels_to_run):
-    # l_, = ax_fr.plot(np.linspace(t_min, t_max, len(firing_rates_opt[0])), firing_rates_opt[idx], c=coll[idx], alpha=1.0)
-    l_, = ax_fr.plot(firing_rates_opt[idx], c=coll[idx], alpha=1.0)
+    l_, = ax_fr.plot(np.linspace(t_min, t_max, len(firing_rates_opt[0])), firing_rates_opt[idx], c=coll[idx], alpha=1.0)
+    # l_, = ax_fr.plot(firing_rates_opt[idx], c=coll[idx], alpha=1.0)
 
-    ax_k.plot(t_kern, kerns[idx][0], c=coll[idx])
+    # ax_k.plot(t_kern, kerns[idx][0], c=coll[idx])
+    ax_k.plot(t_kern, kerns[idx][layers[0]], c=coll[idx])
+
     # ax_k.plot(t_kern, krnl[idx], c=coll[idx])
 
-    # lines.append(l_)
-    line_names.append("firing rate fit {}".format(idx))
+    lines.append(l_)
+    # line_names.append("firing rate fit {}".format(idx))
 
-ax_sig.plot(np.linspace(t_min, t_max, len(data[0])), data[0], c='k')
+# ax_sig.plot(np.linspace(t_min, t_max, len(data[0])), data[0], c='k')
+ax_sig.plot(np.linspace(t_min, t_max, len(data[layers[0]])), data[layers[0]], c='k')
+
 # ax_sig.plot(np.linspace(t_min, t_max, len(doto[0])), doto[0], c='k')
 
-ax_sig.plot(np.linspace(t_min, t_max, len(fit[0])), fit[0], c='gray', ls='--')
+# ax_sig.plot(np.linspace(t_min, t_max, len(fit[0])), fit[0], c='gray', ls='--')
+ax_sig.plot(np.linspace(t_min, t_max, len(fit[layers[0]])), fit[layers[0]], c='gray', ls='--')
 
-# fig.legend(lines, line_names, frameon=False, ncol=4)
+line_names=['L5apical','L5basal','L23apical','L23basal']
+fig.legend(lines, line_names, frameon=False, ncol=4)
 plotting_convention.simplify_axes(fig.axes)
 plt.savefig("plots/100_runs.png")
+print('Total time elapsed:',(time.time()-tic))
 # </editor-fold>
-print('maxnits',nits)
-print("BØR JEG HA MED SHIFT I POLY? VIL VEL STARTE I 0 UANSETT")
-print("KERNELENE VÅRE SER GANSKE FORMLIKE UT, "
-      "SÅ DET INNEBÆRER AT MULIG INFO FRA KUN EEG MÅLING ER BEGRENSET OM MAN TILLATER"
-      "ALL SLAGS FYRING? MEN MED CONSTRAINTS OM EN GLATT FORM "
-      "PÅ FYRINGSRATER KAN MAN KANKSJE SI NOE OM POPULAJSONENE?")
-print("gauss-metoden slik den ser ut kan tillate flere gausser med forskjellig amp og scale å være sentrert i samme punkt."
-      "Det virker litt ufysisk, så kanskje noe slikt som 1 gaus per N tids-steg?")
+
+# print("BØR JEG HA MED SHIFT I POLY? VIL VEL STARTE I 0 UANSETT")
+# print("KERNELENE VÅRE SER GANSKE FORMLIKE UT, "
+#       "SÅ DET INNEBÆRER AT MULIG INFO FRA KUN EEG MÅLING ER BEGRENSET OM MAN TILLATER"
+#       "ALL SLAGS FYRING? MEN MED CONSTRAINTS OM EN GLATT FORM "
+#       "PÅ FYRINGSRATER KAN MAN KANKSJE SI NOE OM POPULAJSONENE?")
+# print("gauss-metoden slik den ser ut kan tillate flere gausser med forskjellig amp og scale å være sentrert i samme punkt."
+#       "Det virker litt ufysisk, så kanskje noe slikt som 1 gaus per N tids-steg?")

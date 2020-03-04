@@ -46,7 +46,7 @@ else:
     fitses = pickle.load(open('data/fits_inhibition_off.p', 'rb'))
     lines = pickle.load(open('data/lines_inhibition_off.p', 'rb'))
 # </editor-fold>
-"""
+
 # <editor-fold desc="make dir">
 folder_time = time.strftime("%m%d-%H%M")
 try:
@@ -55,7 +55,7 @@ except OSError:
     pass
 FOLDER = os.path.join('plots', '{}_{}'.format(suffix,folder_time))
 # </editor-fold>
-"""
+
 # <editor-fold desc="Define functions">
 def insert_synapses(synparams, section, n,heights,firings):
     soma_h = heights['soma']
@@ -105,7 +105,7 @@ electrodeParameters = {
 
 
 parameters={
-    'num_cells':10,
+    'num_cells':6000,
     'divi':2,
     'n_syn':200,
     'firings':{
@@ -117,7 +117,7 @@ parameters={
         'min':-1000.,
         'basal_max':-50.,
         'apical_min':500.,
-        'soma': -1250.+200.,
+        'soma': -1250.+200., #hvorfor +200?
     },
     'cell_parameters':{
         'morphology': morphology,
@@ -152,10 +152,20 @@ elleffpe = [9]
 syni=[]
 # <editor-fold desc="Main simulation">
 for i in range(parameters['num_cells']):
+    # get coords from circle, R=210 from markram2015
+    R=210
+    r=R*np.sqrt(np.random.uniform())
+    theta = np.random.uniform()*2*np.pi
+    x_loc = r*np.cos(theta)
+    y_loc = r*np.sin(theta)
+
+
     print('cell {} of {}.'.format(i + 1, parameters['num_cells']), end='\r')
     cell = LFPy.Cell(**parameters['cell_parameters'])#**cell_parameters)
     cell.set_rotation(x=4.99, y=-4.33)  # let rotate around z-axis
-    cell.set_pos(x=np.random.normal(loc=0,scale=100),y=np.random.normal(loc=0,scale=100),z=np.random.normal(loc=parameters['heights']['soma'],scale=10))
+    # cell.set_pos(x=np.random.normal(loc=0,scale=100),y=np.random.normal(loc=0,scale=100),z=np.random.normal(loc=parameters['heights']['soma'],scale=10))
+    cell.set_pos(x=x_loc,y=y_loc,z=np.random.normal(loc=parameters['heights']['soma'],scale=50))
+
     insert_synapses(parameters['synapse_parameters'], 'apic', parameters['n_syn']
                     ,parameters['heights'],parameters['firings'])
 
@@ -192,10 +202,20 @@ x_line = np.linspace(0, parameters['cell_parameters']['tstop'], len(fitses[0]))
 elleffpe = [9]
 # <editor-fold desc="Main simulation">
 for i in range(parameters['num_cells']):
+    # get coords from circle, R=210 from markram2015
+    R=210
+    r=R*np.sqrt(np.random.uniform())
+    theta = np.random.uniform()*2*np.pi
+    x_loc = r*np.cos(theta)
+    y_loc = r*np.sin(theta)
+
+
     print('cell {} of {}.'.format(i + 1, parameters['num_cells']), end='\r')
     cell = LFPy.Cell(**parameters['cell_parameters'])#**cell_parameters)
     cell.set_rotation(x=4.99, y=-4.33)  # let rotate around z-axis
-    cell.set_pos(x=np.random.normal(loc=0,scale=100),y=np.random.normal(loc=0,scale=100),z=np.random.normal(loc=parameters['heights']['soma'],scale=10))
+    # cell.set_pos(x=np.random.normal(loc=0,scale=100),y=np.random.normal(loc=0,scale=100),z=np.random.normal(loc=parameters['heights']['soma'],scale=10))
+    cell.set_pos(x=x_loc,y=y_loc,z=np.random.normal(loc=parameters['heights']['soma'],scale=50))
+
     insert_synapses(parameters['synapse_parameters'], 'dend', parameters['n_syn']
                     ,parameters['heights'],parameters['firings'])
 
@@ -217,48 +237,51 @@ mupp2 = []
 for i in range(16):
     mupp2.append(ehh[i]-ehh[i][0])
 pickle.dump([mupp,mupp2],open('data/L23.p','wb'))
+pickle.dump([mupp,mupp2],open(os.path.join(FOLDER,'L23.p'),'wb'))
 # # plt.show()
-# fig = plt.figure()
-# ax = fig.add_axes([.4,.1,.55,.8], aspect='equal', frameon=False)
-# #plot morphology
-# zips = []
-# for x, z in cell.get_idx_polygons():
-#     zips.append(list(zip(x, z)))
-# polycol = PolyCollection(zips,
-#                          edgecolors='none',
-#                          facecolors='k')
-# ax.add_collection(polycol)
-#
-# # ax.plot([100, 200], [-400+parameters['heights']['soma'], -400+parameters['heights']['soma']], 'k', lw=1, clip_on=False)
-# # ax.text(150, -470+parameters['heights']['soma'], r'100$\mu$m', va='center', ha='center')
-# # ax.plot([-550, -550], [100+parameters['heights']['soma'], 200+parameters['heights']['soma']], 'k', lw=1, clip_on=False)
-# # ax.text(-670, 150+parameters['heights']['soma'], r'100$\mu$m', va='center', ha='center')
-#
-# # ax.axis('off')
-#
-# ax.plot([-450,-450],[-1600,-1600],'y*')
-# ax.plot(cell.xmid[cell.synidx],cell.zmid[cell.synidx], 'o', ms=1,
-#         markeredgecolor='b',
-#         markerfacecolor='b')
-#
-#
-# ax.plot(cell.xmid[syni],cell.zmid[syni], 'o', ms=1,
-#         markeredgecolor='r',
-#         markerfacecolor='r')
-#
-# for i in range(16):
-#     ax.plot(cell.tvec*20-550,65*mupp[i]/np.max(np.abs(mupp))+(i*100)-300+parameters['heights']['soma'],'r',lw=0.5)
-#     # ax.plot(cell.tvec*20-550,30*mupp[i]/np.max(np.abs(mupp[i]))+(i*100)-300+parameters['heights']['soma'],'r')
-#
-# for i in range(16):
-#     ax.plot(cell.tvec*20-550,65*mupp2[i]/np.max(np.abs(mupp2))+(i*100)-300+parameters['heights']['soma'],'b',lw=0.5)
-#     # ax.plot(cell.tvec*20-550,30*mupp2[i]/np.max(np.abs(mupp2[i]))+(i*100)-300+parameters['heights']['soma'],'b')
-# ax.set_yticks(np.linspace(-50,-1550,16))
-# ax.set_yticklabels(np.linspace(100,1600,16).astype(int))
-# ax.set_xticks(np.linspace(-550,450,5))
-# ax.set_xticklabels(np.linspace(0,50,5))
-# ax.set_xlabel('time [ms]')
-# ax.set_ylabel('depth [um]')
+fig = plt.figure()
+ax = fig.add_axes([.4,.1,.55,.8], aspect='equal', frameon=False)
+#plot morphology
+zips = []
+for x, z in cell.get_idx_polygons():
+    zips.append(list(zip(x, z)))
+polycol = PolyCollection(zips,
+                         edgecolors='none',
+                         facecolors='k',
+                         alpha=0.5)
+ax.add_collection(polycol)
+
+# ax.plot([100, 200], [-400+parameters['heights']['soma'], -400+parameters['heights']['soma']], 'k', lw=1, clip_on=False)
+# ax.text(150, -470+parameters['heights']['soma'], r'100$\mu$m', va='center', ha='center')
+# ax.plot([-550, -550], [100+parameters['heights']['soma'], 200+parameters['heights']['soma']], 'k', lw=1, clip_on=False)
+# ax.text(-670, 150+parameters['heights']['soma'], r'100$\mu$m', va='center', ha='center')
+
+# ax.axis('off')
+
+ax.plot([-450,-450],[-1600,-1600],'y*')
+ax.plot(cell.xmid[cell.synidx],cell.zmid[cell.synidx], 'o', ms=1,
+        markeredgecolor='b',
+        markerfacecolor='b')
+
+
+ax.plot(cell.xmid[syni],cell.zmid[syni], 'o', ms=1,
+        markeredgecolor='r',
+        markerfacecolor='r')
+
+for i in range(16):
+    ax.plot(cell.tvec*20-550,65*mupp[i]/np.max(np.abs(mupp))+(i*100)-300+parameters['heights']['soma'],'r',lw=0.5)
+    # ax.plot(cell.tvec*20-550,30*mupp[i]/np.max(np.abs(mupp[i]))+(i*100)-300+parameters['heights']['soma'],'r')
+
+for i in range(16):
+    ax.plot(cell.tvec*20-550,65*mupp2[i]/np.max(np.abs(mupp2))+(i*100)-300+parameters['heights']['soma'],'b',lw=0.5)
+    # ax.plot(cell.tvec*20-550,30*mupp2[i]/np.max(np.abs(mupp2[i]))+(i*100)-300+parameters['heights']['soma'],'b')
+ax.set_yticks(np.linspace(-50,-1550,16))
+ax.set_yticklabels(np.linspace(100,1600,16).astype(int))
+ax.set_xticks(np.linspace(-550,450,5))
+ax.set_xticklabels(np.linspace(0,50,5))
+ax.set_xlabel('time [ms]')
+ax.set_ylabel('depth [um]')
+plt.savefig(os.path.join(FOLDER,'L23_kernels.jpg'))
 # plt.show()
 #
 # print("for å lage l2/3, samle imem over inervaller som 100-200,200-300 etc, summere og halvere rangen, kanksje? "
